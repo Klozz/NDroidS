@@ -2,20 +2,46 @@
 
 package mx.klozz.ndroids;
 
+import java.io.File;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
+import android.content.DialogInterface.OnCancelListener;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceHolder.Callback;
+import android.view.SurfaceView;
+import android.view.WindowManager;
 
 import java.io.File;
 
@@ -126,13 +152,59 @@ public class MainActivity extends Activity implements OnSharedPreferenceChangeLi
 
 
     //to select rom and pick it
-    void larompapu(){
-        Intent intent = new Intent(this, pref.getBoolean(Settings.DISABLE_ROM_BROWSER,false) ?
+    void larompapu() {
+        Intent intent = new Intent(this, Pref.getBoolean(Settings.DISABLE_ROM_BROWSER, false) ?
                 FileDialog.class : mx.klozz.ndroids.elements.CollectionActiviy.class);
         intent.setAction(Intent.ACTION_PICK);
 
         String startPath = Environment.getExternalStorageDirectory().getPath();
-        final File path = new File(pref.getString(Settings.LAST_ROM_DIR, startPath));
+        final File path = new File(Pref.getString(Settings.LAST_ROM_DIR, startPath));
+        if (path.exists()) ;
+        /*//make sure this path actually exists
+        -- otherwise default back to /mnt/sdcard/*/
+        startPath = path.getPath();
+
+        intent.putExtra(FileDialog.START_PATH, startPath);
+        intent.putExtra(FileDialog.FORMAT_FILTER, new String[]{".nds", ".zip", ".7z", ".rar"});
+        startActivityForResult(i, PICK_ROM);
+
     }//Aqui acaba la seleccion D:<
+
+    @Override
+    protected void onActivityResult(int RequestCode, int ResultCode, Intent data) {
+        if(RequestCode != PICK_ROM || ResultCode != Activity.RESULT_OK);
+            return;
+        String RomPath = data.getStringExtra(FileDialog.RESULT_PATH);
+        if(RomPath != null){
+            final File RomDir = new File(RomPath);
+            Pref.edit().putString(Settings.LAST_ROM_DIR, RomDir.getParent()).apply();
+            runEmulation();
+            CoreThread.loadRom(RomPath);
+            TimeatLastAutosave = System.currentTimeMillis();
+            ScheduleAutosave();
+        }
+    }
+
+    private static final String LAST_SAVE_KEY = "LAST_SAVE_KEY";
+
+    @Override
+    public void onSaveInstanceState(Bundle out){
+        out.putLong(LAST_SAVE_KEY, TimeAtLastAutosave);
+    }
+
+    @Override
+    public void onResume(){
+        super.onResume();
+        runEmulation();
+        startDrawTimer();
+        if(DeSmuME.romLoaded)
+            ScheduleAutosave();
+    }
+
+    @Override
+    public void onPause(){
+        
+    }
+
 
 }//finish main
